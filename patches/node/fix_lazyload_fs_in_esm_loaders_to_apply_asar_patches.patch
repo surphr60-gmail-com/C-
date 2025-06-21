@@ -1,0 +1,92 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Samuel Attard <marshallofsound@electronjs.org>
+Date: Tue, 7 Mar 2023 16:17:41 -0800
+Subject: fix: lazyload fs in esm loaders to apply asar patches
+
+Changes { foo } from fs to just "fs.foo" so that our patching of fs is applied to esm loaders
+
+diff --git a/lib/internal/modules/esm/load.js b/lib/internal/modules/esm/load.js
+index a00b5979e3b5deb4ba315b4635c7e5d2801c376e..c9d4a3536d0f60375ae623b48ca2fa7095c88d42 100644
+--- a/lib/internal/modules/esm/load.js
++++ b/lib/internal/modules/esm/load.js
+@@ -10,7 +10,7 @@ const {
+ const { defaultGetFormat } = require('internal/modules/esm/get_format');
+ const { validateAttributes, emitImportAssertionWarning } = require('internal/modules/esm/assert');
+ const { getOptionValue } = require('internal/options');
+-const { readFileSync } = require('fs');
++const fs = require('fs');
+ 
+ const defaultType =
+   getOptionValue('--experimental-default-type');
+@@ -38,8 +38,7 @@ async function getSource(url, context) {
+   const responseURL = href;
+   let source;
+   if (protocol === 'file:') {
+-    const { readFile: readFileAsync } = require('internal/fs/promises').exports;
+-    source = await readFileAsync(url);
++    source = await fs.promises.readFile(url);
+   } else if (protocol === 'data:') {
+     const result = dataURLProcessor(url);
+     if (result === 'failure') {
+@@ -63,7 +62,7 @@ function getSourceSync(url, context) {
+   const responseURL = href;
+   let source;
+   if (protocol === 'file:') {
+-    source = readFileSync(url);
++    source = fs.readFileSync(url);
+   } else if (protocol === 'data:') {
+     const result = dataURLProcessor(url);
+     if (result === 'failure') {
+diff --git a/lib/internal/modules/esm/resolve.js b/lib/internal/modules/esm/resolve.js
+index 9e7d8ef0adef3b68a3ec186e4b218f591aa69266..2879e5cf541fb4d226cfd7cc0fe367ca448fb926 100644
+--- a/lib/internal/modules/esm/resolve.js
++++ b/lib/internal/modules/esm/resolve.js
+@@ -25,7 +25,7 @@ const {
+ const assert = require('internal/assert');
+ const internalFS = require('internal/fs/utils');
+ const { BuiltinModule } = require('internal/bootstrap/realm');
+-const { realpathSync } = require('fs');
++const fs = require('fs');
+ const { getOptionValue } = require('internal/options');
+ // Do not eagerly grab .manifest, it may be in TDZ
+ const { sep, posix: { relative: relativePosixPath }, resolve } = require('path');
+@@ -277,7 +277,7 @@ function finalizeResolution(resolved, base, preserveSymlinks) {
+   }
+ 
+   if (!preserveSymlinks) {
+-    const real = realpathSync(path, {
++    const real = fs.realpathSync(path, {
+       [internalFS.realpathCacheKey]: realpathCache,
+     });
+     const { search, hash } = resolved;
+diff --git a/lib/internal/modules/esm/translators.js b/lib/internal/modules/esm/translators.js
+index 1b94d923b6d83cc7806d793497a4f9f978c5938c..0caba80bb213e0edfb1f834250f895ccc05d0d1c 100644
+--- a/lib/internal/modules/esm/translators.js
++++ b/lib/internal/modules/esm/translators.js
+@@ -24,7 +24,7 @@ const {
+ 
+ const { BuiltinModule } = require('internal/bootstrap/realm');
+ const assert = require('internal/assert');
+-const { readFileSync } = require('fs');
++const fs = require('fs');
+ const { dirname, extname, isAbsolute } = require('path');
+ const {
+   assertBufferSource,
+@@ -268,7 +268,7 @@ translators.set('commonjs', function commonjsStrategy(url, source, isMain) {
+ 
+   try {
+     // We still need to read the FS to detect the exports.
+-    source ??= readFileSync(new URL(url), 'utf8');
++    source ??= fs.readFileSync(new URL(url), 'utf8');
+   } catch {
+     // Continue regardless of error.
+   }
+@@ -335,7 +335,7 @@ function cjsPreparseModuleExports(filename, source) {
+       isAbsolute(resolved)) {
+         // TODO: this should be calling the `load` hook chain to get the source
+         // (and fallback to reading the FS only if the source is nullish).
+-        const source = readFileSync(resolved, 'utf-8');
++        const source = fs.readFileSync(resolved, 'utf-8');
+         const { exportNames: reexportNames } = cjsPreparseModuleExports(resolved, source);
+         for (const name of reexportNames) {
+           exportNames.add(name);
